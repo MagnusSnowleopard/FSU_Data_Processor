@@ -1,5 +1,22 @@
-printf '%s\n' \
-'# ROOT outputs' '*.root' '*.so' '*.d' '*.pcm' \
-'# Build artifacts' 'build/' 'cmake-build-*/' '*.o' '*.a' '*.dSYM/' \
-'# Swap & temp' '*~' '*.swp' '.#*' \
-'# Local data/output (optional)' 'data/' 'output/' \
+# ROOT outputs
+*.root
+*.so
+*.d
+*.pcm
+
+# Build artifacts
+build/
+cmake-build-*/
+*.o
+*.a
+*.dSYM/
+
+# Editor/OS junk
+*~
+*.swp
+.#*
+.DS_Store
+
+# Optional local dirs
+data/
+output/

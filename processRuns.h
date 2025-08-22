@@ -20,8 +20,14 @@
 #include "detectorshifts.h"
 #include "globals.h"
 
-//DO NOT CHANGE
+
+// ---- NDET handling ----------------------------------------------------------
+// DO NOT CHANGE this is 15; ensure it’s defined exactly once.
+
+#ifndef NDET
 #define NDET 15
+#endif
+
 
 struct DetectorHistograms {
 	TH1F* tDiff   = nullptr;
@@ -54,8 +60,13 @@ extern std::map<int, std::pair<float,float>> detCalMap;
 extern std::map<int, float> Distance;
 extern std::map<int, float> Angle;
 
-RunHistograms processRuns( int RunNumber, bool isPrompt, const std::vector<double>& detectorShifts){
+inline RunHistograms processRuns( int RunNumber, bool isPrompt, const std::vector<double>& detectorShifts){
 
+
+	 // ---- sanity on detectorShifts length ----
+    if ((int)detectorShifts.size() < NDET) {
+        std::cerr << "processRuns: detectorShifts size < NDET; missing shifts will be treated as 0.\n";
+    }
 	int even_counter =0;
 	int odd_counter = 0;
 
@@ -489,7 +500,7 @@ RunHistograms processRuns( int RunNumber, bool isPrompt, const std::vector<doubl
 
 		detectors[i].tDiffg->SetLineColor(2);
 
-		detectors[i].Eneutron = new TH1F(Form("Eneutron-run%d-det%d",RunNumber, i+1), "",148 , -20, 20);
+		detectors[i].ENeutron = new TH1F(Form("Eneutron-run%d-det%d",RunNumber, i+1), "",148 , -20, 20);
 		//      detectors[i].QVAL = new TH1F(Form("QVAL-run%d-det%d",RunNumber, i+1), "",148 , -20, 20);
 		//      detectors[i].EX = new TH1F(Form("EX-run%d-det%d",RunNumber, i+1), "",148 , -20, 20);
 
@@ -601,7 +612,7 @@ RunHistograms processRuns( int RunNumber, bool isPrompt, const std::vector<doubl
 					tdf = tdf - 82.5;
 				}
 
-				tDiff[i]->Fill( tdf );
+				detectors[i].tDiff[i]->Fill( tdf );
 				//std::cout << i << std::endl;
 				double tdf2 = tdf *1e-9;
 				double E_tof = 6.241509e12 * ((0.5) * mnsi* (dist[i]*dist[i]/(tdf2*tdf2)));
