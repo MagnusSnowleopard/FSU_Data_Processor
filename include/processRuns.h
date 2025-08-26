@@ -518,29 +518,9 @@ inline bool processRunFill( int RunNumber, bool isPrompt, const std::vector<doub
 		}
 	}
 	/////////////End of cuts formation ///////////////////////////////////////////
-	/*
-	   std::vector<DetectorHistograms> detectors(NDET);
-
-	   for(int i = 0; i < NDET; ++i){
-	   detectors[i].tDiff = new TH1F(Form("Tdiff-run%d-det%d",RunNumber, i+1), "", timeBin, timeRange[0], timeRange[1]);
-
-	   detectors[i].tDiffg = new TH1F(Form("Tdiffg-run%d-det%d",RunNumber, i+1),"", timeBin, timeRange[0], timeRange[1]);
-	   detectors[i].tDiffn = new TH1F(Form("Tdiffn-run%d-det%d",RunNumber, i+1),"", timeBin, timeRange[0], timeRange[1]);
-
-	   detectors[i].tDiffg->SetLineColor(2);
-
-	   detectors[i].ENeutron = new TH1F(Form("Eneutron-run%d-det%d",RunNumber, i+1), "",148 , -20, 20);
-	//      detectors[i].QVAL = new TH1F(Form("QVAL-run%d-det%d",RunNumber, i+1), "",148 , -20, 20);
-	//      detectors[i].EX = new TH1F(Form("EX-run%d-det%d",RunNumber, i+1), "",148 , -20, 20);
-	detectors[i].PSD = new TH2F(Form("PSD-run%d-det%d",RunNumber, i),"", 4096, 0, max_E,512,-.1,1);
-	detectors[i].PSDg = new TH2F(Form("PSDg-run%d-det%d",RunNumber, i),"", 4096, 0, max_E,512,-.1,1);
-	detectors[i].PSDn = new TH2F(Form("PSDn-run%d-det%d",RunNumber, i),"", 4096, 0, max_E,512,-.1,1);
-
-	}
-	*/
 
 	ULong64_t beammonitor=tree->GetEntries("ch==2 && sn==89");
-	std::cout << "Beam monitor count for run # " << RunNumber << " = " << beammonitor << std::endl;
+//	std::cout << "Beam monitor count for run # " << RunNumber << " = " << beammonitor << std::endl;
 	while(reader.Next())
 	{
 
@@ -691,6 +671,48 @@ inline bool processRunFill( int RunNumber, bool isPrompt, const std::vector<doub
 
 	//	std::cout << "Even count = " << even_counter << " Odd Counter = " << odd_counter << std::endl;
 	return true;
+
+}
+
+inline int GETBEAMCOUNTER( int RunNumber, bool isPrompt){
+
+
+	int even_counter =0;
+	int odd_counter = 0;
+	TString fileName = findRunFile(RunNumber);
+	if (fileName.IsNull()) {
+		std::cerr << "No input file found for run " << RunNumber
+			<< " under " << DATA_DIR << " with known patterns.\n";
+		return false;
+	}
+	TFile file(fileName, "READ");
+
+
+	if (file.IsZombie()) { return false; }
+
+	TTree* tree = (TTree*)file.Get("tree");
+	if (!tree) {
+		std::cerr << "No tree in file: " << fileName << std::endl;
+		return false;
+	}
+
+	// Silence the warning about TNotifyLink
+	tree->SetNotify(nullptr);
+	TTreeReader reader(tree);
+
+	TTreeReaderValue<ULong64_t>  evID = {reader, "evID"};
+	TTreeReaderValue<UInt_t>    multi = {reader, "multi"};
+	TTreeReaderArray<UShort_t>     sn = {reader, "sn"}; // serial no. 
+	TTreeReaderArray<UShort_t>     ch = {reader, "ch"}; // channel
+	TTreeReaderArray<UShort_t>      e = {reader, "e"};  //long
+	TTreeReaderArray<UShort_t>     e2 = {reader, "e2"}; //short
+	TTreeReaderArray<ULong64_t>   e_t = {reader, "e_t"}; // in ns
+	TTreeReaderArray<UShort_t>    e_f = {reader, "e_f"}; // in ps
+
+
+	ULong64_t beammonitor=tree->GetEntries("ch==2 && sn==89");
+
+	return beammonitor;
 
 }
 
