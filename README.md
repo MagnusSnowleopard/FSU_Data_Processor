@@ -10,7 +10,9 @@ Repository layout
 │  ├─ detectorshifts.h       # default + per-run + per-range shifts & accessor
 │  └─ processRuns.h          # header-only analysis kernel + histogram structs
 ├─ src/
-│  └─ script.C               # (optional) ROOT macro interface (script(...))
+│  └─ script.cpp             # Runs all headers and auxillary scripts to read in prompt and background runs and process them. 
+│  ├─ main.cpp      	     # Runs an executible using script(..)
+│  └─ detcal-data.cpp        # Initialize detector calibrations.
 ├─ data/                     # runNNN.root inputs (git-ignored by default)
 ├─ output/                   # merged results (git-ignored by default)
 ├─ .gitignore
@@ -24,7 +26,7 @@ What each header is responsible for
 globals.h
 Holds global constants used everywhere, most importantly the number of detectors (NDET). Keeping this single source of truth ensures all arrays and loops agree on the detector count.
 
-mapinit.h
+--------------------mapinit.h---------------------------------
 Defines the translation from low-level hardware to analysis channels. It contains:
 
 A map from a logical “channel index” to a logical detector ID (0..NDET-1), plus a special ID (200) used for the RF/beam monitor channel.
@@ -35,7 +37,7 @@ A map from digitizer serial numbers to the board row used in that 2×16 matrix.
 
 Together, these let the analysis take each hit’s (serial number, channel) and decide whether it’s the RF reference or one of your detectors.
 
-detcal.h
+----------------------------detcal.h--------------------------------------
 Declares your calibration and geometry data:
 
 Per-detector linear energy calibration coefficients (A, B) to turn the raw long integral into calibrated energy.
@@ -46,7 +48,7 @@ Per-detector angle (degrees), available for any angle-dependent physics you migh
 
 These are declared here and defined once elsewhere so the whole project shares the same numbers.
 
-detectorshifts.h
+----------------------------detectorshifts.h--------------------------------
 Encodes timing shifts (in nanoseconds) to be added per detector before folding time differences. It supports:
 
 A default shift vector that applies to all runs.
@@ -56,7 +58,7 @@ Exact per-run overrides.
 Per-run range overrides.
 A single helper returns the correct shift vector for any run after applying those precedence rules (exact run beats range, which beats default).
 
-processRuns.h
+-----------------------------processRuns.h----------------------------
 Implements the per-run analysis and defines the histogram bundles:
 
 A struct that groups per-detector histograms (time-difference inclusive, gamma-only, neutron-only; neutron energy; PSD inclusive, gamma-only, neutron-only).
@@ -114,7 +116,7 @@ It returns a result object containing all per-detector histograms for that run a
 
 Throughout, it guards against missing files/trees, out-of-range channels, unknown serial numbers, or absent RF timestamps, and quietly skips anything it can’t interpret.
 
-What the top-level script function does
+-------------------What the top-level script function does--------------------------------------------
 It parses four string inputs: start and end of the prompt run range, and start and end of the background run range.
 
 For each prompt run number, it asks the shift system for the correct per-detector shifts for that run, calls processRuns with the “prompt” flag, and collects the per-run results. It repeats the same for all background runs with the “background” flag.
