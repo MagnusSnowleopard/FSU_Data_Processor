@@ -1,20 +1,26 @@
 #ifndef PROCESSRUNS_H
 #define PROCESSRUNS_H
 
+#ifndef DATA_DIR
+#define DATA_DIR "data"
+#endif
+
 #include <vector>
 #include <map>
 #include <iostream>
+#include <cmath>
 
 #include "TFile.h"
 #include "TTree.h"
 #include "TTreeReader.h"
 #include "TTreeReaderValue.h"
 #include "TTreeReaderArray.h"
+#include "TString.h"
 #include "TH1F.h"
 #include "TH2F.h"
 #include "TCutG.h"
 #include "TMath.h"
-
+#include "TROOT.h"
 #include "mapinit.h"
 #include "detcal.h"
 #include "detectorshifts.h"
@@ -27,7 +33,21 @@
 #ifndef NDET
 #define NDET 15
 #endif
-
+// Try common filename patterns and return the first that exists.
+// Example matches: run60.root, run_60.root, run_060.root, run_60_3000.root, run_060_3000.root
+inline TString findRunFile(int run) {
+	std::vector<TString> candidates = {
+		Form("%s/run%d.root",           DATA_DIR, run),        // run60.root
+		Form("%s/run_%d.root",          DATA_DIR, run),        // run_60.root
+		Form("%s/run_%03d.root",        DATA_DIR, run),        // run_060.root
+		Form("%s/run_%d_3000.root",     DATA_DIR, run),        // run_60_3000.root
+		Form("%s/run_%03d_3000.root",   DATA_DIR, run)         // run_060_3000.root  <-- your files
+	};
+	for (const auto& p : candidates) {
+		if (!gSystem->AccessPathName(p)) return p; // file exists
+	}
+	return ""; // not found
+}
 
 struct DetectorHistograms {
 	TH1F* tDiff   = nullptr;
@@ -56,31 +76,39 @@ extern const std::map<unsigned short, int> Index2ID;
 extern const int mapping[2][16];
 
 //   detCalMap, Distance, Angle
-extern std::map<int, std::pair<float,float>> detCalMap;
-extern std::map<int, float> Distance;
-extern std::map<int, float> Angle;
+extern std::map<int, std::pair<double,double>> detCalMap;
+extern std::map<int, double> Distance;
+extern std::map<int, double> Angle;
 
-inline RunHistograms processRuns( int RunNumber, bool isPrompt, const std::vector<double>& detectorShifts){
+inline bool processRunFill( int RunNumber, bool isPrompt, const std::vector<double>& detectorShifts,std::vector<DetectorHistograms>& totals){
 
 
-	 // ---- sanity on detectorShifts length ----
-    if ((int)detectorShifts.size() < NDET) {
-        std::cerr << "processRuns: detectorShifts size < NDET; missing shifts will be treated as 0.\n";
-    }
+	// ---- sanity on detectorShifts length ----
+	if ((int)detectorShifts.size() < NDET) {
+		std::cerr << "processRuns: detectorShifts size < NDET; missing shifts will be treated as 0.\n";
+	}
 	int even_counter =0;
 	int odd_counter = 0;
+	// NEW lines (use the resolver)
+	TString fileName = findRunFile(RunNumber);
+	if (fileName.IsNull()) {
+		std::cerr << "No input file found for run " << RunNumber
+			<< " under " << DATA_DIR << " with known patterns.\n";
+		return false;
+	}
+	TFile file(fileName, "READ");
 
 
-	TString fileName = Form("run%d.root", runNumber);
-	TFile file(fileName);
-
-	if(file.IsZombie()){return {{},isPrompt}};
+	if (file.IsZombie()) { return false; }
 
 	TTree* tree = (TTree*)file.Get("tree");
-	if(!tree){std::cerr << "No tree in file:" << fileName << std::endl;
-		return {{}, isPrompt}};
+	if (!tree) {
+		std::cerr << "No tree in file: " << fileName << std::endl;
+		return false;
+	}
 
-
+	// Silence the warning about TNotifyLink
+	tree->SetNotify(nullptr);
 	TTreeReader reader(tree);
 
 	TTreeReaderValue<ULong64_t>  evID = {reader, "evID"};
@@ -490,35 +518,40 @@ inline RunHistograms processRuns( int RunNumber, bool isPrompt, const std::vecto
 		}
 	}
 	/////////////End of cuts formation ///////////////////////////////////////////
+	/*
+	   std::vector<DetectorHistograms> detectors(NDET);
 
-	std::vector<DetectorHistograms> detectors(NDET);
+	   for(int i = 0; i < NDET; ++i){
+	   detectors[i].tDiff = new TH1F(Form("Tdiff-run%d-det%d",RunNumber, i+1), "", timeBin, timeRange[0], timeRange[1]);
 
-	for(int i = 0; i < NDET; ++i){
-		detectors[i].tDiff = new TH1F(Form("Tdiff-run%d-det%d",RunNumber, i+1), "", timeBin, timeRange[0], timeRange[1]);
-		detectors[i].tDiffg = new TH1F(Form("Tdiffg-run%d-det%d",RunNumber, i+1),"", timeBin, timeRange[0], timeRange[1]);
-		detectors[i].tDiffn = new TH1F(Form("Tdiffn-run%d-det%d",RunNumber, i+1),"", timeBin, timeRange[0], timeRange[1]);
+	   detectors[i].tDiffg = new TH1F(Form("Tdiffg-run%d-det%d",RunNumber, i+1),"", timeBin, timeRange[0], timeRange[1]);
+	   detectors[i].tDiffn = new TH1F(Form("Tdiffn-run%d-det%d",RunNumber, i+1),"", timeBin, timeRange[0], timeRange[1]);
 
-		detectors[i].tDiffg->SetLineColor(2);
+	   detectors[i].tDiffg->SetLineColor(2);
 
-		detectors[i].ENeutron = new TH1F(Form("Eneutron-run%d-det%d",RunNumber, i+1), "",148 , -20, 20);
-		//      detectors[i].QVAL = new TH1F(Form("QVAL-run%d-det%d",RunNumber, i+1), "",148 , -20, 20);
-		//      detectors[i].EX = new TH1F(Form("EX-run%d-det%d",RunNumber, i+1), "",148 , -20, 20);
+	   detectors[i].ENeutron = new TH1F(Form("Eneutron-run%d-det%d",RunNumber, i+1), "",148 , -20, 20);
+	//      detectors[i].QVAL = new TH1F(Form("QVAL-run%d-det%d",RunNumber, i+1), "",148 , -20, 20);
+	//      detectors[i].EX = new TH1F(Form("EX-run%d-det%d",RunNumber, i+1), "",148 , -20, 20);
+	detectors[i].PSD = new TH2F(Form("PSD-run%d-det%d",RunNumber, i),"", 4096, 0, max_E,512,-.1,1);
+	detectors[i].PSDg = new TH2F(Form("PSDg-run%d-det%d",RunNumber, i),"", 4096, 0, max_E,512,-.1,1);
+	detectors[i].PSDn = new TH2F(Form("PSDn-run%d-det%d",RunNumber, i),"", 4096, 0, max_E,512,-.1,1);
 
-		detectors[i].PSD = new TH2F(Form("PSD-run%d-det%d",RunNumber, i),"", 4096, 0, max_E,512,-.1,1);
-		detectors[i].PSDg = new TH2F(Form("PSDg-run%d-det%d",RunNumber, i),"", 4096, 0, max_E,512,-.1,1);
-		detectors[i].PSDn = new TH2F(Form("PSDn-run%d-det%d",RunNumber, i),"", 4096, 0, max_E,512,-.1,1);
 	}
-
+	*/
 
 	ULong64_t beammonitor=tree->GetEntries("ch==2 && sn==89");
 	std::cout << "Beam monitor count for run # " << RunNumber << " = " << beammonitor << std::endl;
 	while(reader.Next())
 	{
 
+		double A ;
+		double B ;
+		double D ;
+		double theta;
 		int count = 0;
 		unsigned long long tRF = 0;
 		std::vector<unsigned long long> tN(NDET,0);
-		std::vector<float> eL(NDET,0),eS(NDET,0),eLcal(NDET,0),dist(NDET,0),angle(NDET,0);
+		std::vector<unsigned long long> eL(NDET,0),eS(NDET,0),eLcal(NDET,0),dist(NDET,0),angle(NDET,0);
 
 		for( int j = 0; j < *multi; j++)
 		{
@@ -542,10 +575,10 @@ inline RunHistograms processRuns( int RunNumber, bool isPrompt, const std::vecto
 
 				//              std::cout << ID << std::endl;
 
-				float A = detCalMap[ID+1].first;
-				float B = detCalMap[ID+1].second;
-				float D = Distance[ID+1];
-				float theta = Angle[ID+1];
+				A = detCalMap[ID+1].first;
+				B = detCalMap[ID+1].second;
+				D = Distance[ID+1];
+				theta = Angle[ID+1];
 				eL[ID] =e[j];
 				eS[ID] =e2[j];
 				eLcal[ID] = A * e[j] + B;
@@ -585,7 +618,6 @@ inline RunHistograms processRuns( int RunNumber, bool isPrompt, const std::vecto
 					//              tdf = (tN[i] - tRF)*(-1.);
 				}
 				double psd = (eL[i] - eS[i])*1.0/eL[i];
-				//      PSD[i]->Fill(eLcal[i],psd);
 
 				double photon_time = dist[i]/2.99792458e8 * 1e9;
 				// flip on the yaxis 
@@ -611,30 +643,39 @@ inline RunHistograms processRuns( int RunNumber, bool isPrompt, const std::vecto
 				if(tdf > 82.5){
 					tdf = tdf - 82.5;
 				}
+				auto& H = totals[i];
+				H.tDiff->Fill( tdf );
+				H.PSD->Fill(eLcal[i],psd);
 
-				detectors[i].tDiff[i]->Fill( tdf );
-				//std::cout << i << std::endl;
-				double tdf2 = tdf *1e-9;
-				double E_tof = 6.241509e12 * ((0.5) * mnsi* (dist[i]*dist[i]/(tdf2*tdf2)));
-
+				// TOF neutron energy (only if neutron-classified)
+				t_s = tdf * 1e-9;    // ns -> s
+				if (t_s > 0.0) {
+					v = D / t_s;                 // m/s
+					E_J = 0.5 * kMn * v * v;     // Joules
+					E_keV = E_J * kJ2keV;        // keV
+								     // Fill E only if classified as neutron, inside your neutron branch:
+								     //    detectors[i].ENeutron->Fill(E_keV);
+				}
 				//              double Qv = (Tb - Ta + (1/(m*gamma))*(Ta*ma + Tb*mb - 2*std::sqrt(Ta*ma*Tb*mb)*cos(angle[i])));
 
 
 				if(ncuts[i]->IsInside(eLcal[i],psd))
 				{
-					detectors[i].Eneutron->Fill(E_tof);
-					//      Eneutron[i]->Fill(eLcal[i]);
-					detectors[i].PSDn->Fill(eLcal[i],psd);
 
-					detectors[i].tDiffn->Fill( tdf );
-					detectors[i].eL_tDiff[i]->Fill( tdf, eLcal[i]);
+
+					H.ENeutron->Fill(E_keV);
+					//      Eneutron[i]->Fill(eLcal[i]);
+					H.PSDn->Fill(eLcal[i],psd);
+
+					H.tDiffn->Fill( tdf );
+					//		detectors[i].eL_tDiff->Fill( tdf, eLcal[i]);
 
 				} // end if cuts->isInside
 				else if(gcuts[i]->IsInside(eLcal[i],psd))
 				{
 					//Eneutron[i]->Fill(eL[i]);
-					detectors[i].PSDg->Fill(eLcal[i],psd);
-					detectors[i].tDiffg->Fill( tdf );
+					H.PSDg->Fill(eLcal[i],psd);
+					H.tDiffg->Fill( tdf );
 
 				} // end if cuts->isInside
 
@@ -648,8 +689,8 @@ inline RunHistograms processRuns( int RunNumber, bool isPrompt, const std::vecto
 
 	} // end while(reader.Next())
 
-	std::cout << "Even count = " << even_counter << " Odd Counter = " << odd_counter << std::endl;
-	return {detectors, isPrompt};
+	//	std::cout << "Even count = " << even_counter << " Odd Counter = " << odd_counter << std::endl;
+	return true;
 
 }
 
